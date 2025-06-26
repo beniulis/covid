@@ -1,0 +1,8 @@
+name: covid-analysis
+dependencies:
+  - python=3.9.6
+  - pandas
+  - numpy
+  - matplotlib
+  - seaborn
+  - requests
