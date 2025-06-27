@@ -11,15 +11,12 @@ df = load_and_prepare_data()
 # --- Generate date list for slider ---
 df_dates = df['date'].sort_values().unique()
 
-monthly_marks = {}
-for i, date in enumerate(df_dates):
-    if pd.to_datetime(date).day == 1 and i % 2 == 0:  # every 2nd month
-        monthly_marks[i] = {'label': f"{date.strftime('%b')}<br>{date.strftime('%Y')}"}
+# In your Dash setup
+unique_dates = df['date'].dt.to_period('M').drop_duplicates().dt.to_timestamp()
+date_options = list(unique_dates)
 
-year_marks = {}
-for i, date in enumerate(df_dates):
-    if date.month == 1:  # January only for marks
-        year_marks[i] = str(date.year)
+# Use index for slider
+slider_marks = {i: date.strftime('%Y') for i, date in enumerate(date_options) if date.month == 1}  # Show only Januarys
 
 app = dash.Dash(__name__)
 app.title = "COVID-19 Dashboard"
@@ -36,11 +33,11 @@ app.layout = html.Div([
     dcc.RangeSlider(
         id='date-slider',
         min=0,
-        max=len(df_dates) - 1,
-        value=[0, len(df_dates) - 1],
-        marks=year_marks,
-        step=1,  # step by 1 month
-        tooltip={"placement": "bottom", "always_visible": False}
+        max=len(date_options) - 1,
+        value=[0, len(date_options) - 1],
+        marks=slider_marks,
+        step=1,
+        allowCross=False,
     ),
     
     dcc.Checklist(
@@ -66,20 +63,24 @@ app.layout = html.Div([
 )
 def update_plots(selected_country, date_range_idx, lock_deaths, previous_deaths_fig):
     # Convert slider indices to dates
-    df_dates = df['date'].sort_values().unique()
-    start_date = df_dates[date_range_idx[0]]
-    end_date = df_dates[date_range_idx[1]]
+    start_date = date_options[date_range_idx[0]]
+    end_date = date_options[date_range_idx[1]]
     
     # Filter data
     country_df = df[(df['country'] == selected_country) &
                     (df['date'] >= start_date) &
                     (df['date'] <= end_date)]
+    
+    title = (
+            f"COVID-19 Daily New Cases in {selected_country}"
+            f"<br>({start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')})"
+)
 
     # --- Case Plot ---
     fig_cases = px.line(
         country_df, x='date', y=['new_cases', 'rolling_avg_cases'],
         labels={'value': 'Cases', 'date': 'Date', 'variable': 'Metric'},
-        title=f"COVID-19 Daily New Cases in {selected_country}"
+        title=title
     )
     fig_cases.update_layout(legend_title_text='Metric', template='plotly_white')
 
@@ -87,10 +88,14 @@ def update_plots(selected_country, date_range_idx, lock_deaths, previous_deaths_
     if 'lock' in lock_deaths and previous_deaths_fig:
         fig_deaths = previous_deaths_fig  # Keep previous
     else:
+        title = (
+            f"COVID-19 Daily New Deaths in {selected_country}"
+            f"<br>({start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')})"
+        )
         fig_deaths = px.line(
             country_df, x='date', y=['new_deaths', 'rolling_avg_deaths'],
             labels={'value': 'Deaths', 'date': 'Date', 'variable': 'Metric'},
-            title=f"COVID-19 Daily New Deaths in {selected_country}"
+            title=title
         )
         fig_deaths.update_layout(legend_title_text='Metric', template='plotly_white')
 
