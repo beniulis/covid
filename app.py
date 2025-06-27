@@ -24,11 +24,27 @@ app.title = "COVID-19 Dashboard"
 app.layout = html.Div([
     html.H1("COVID-19 Daily Cases and Deaths by Country"),
     
-    dcc.Dropdown(
-        id='country-dropdown',
-        options=[{'label': c, 'value': c} for c in sorted(df['country'].unique())],
-        value='United Kingdom'
-    ),
+    html.Div([
+        html.Div([
+            html.Label("Compare Countries by Cases"),
+            dcc.Dropdown(
+                id='cases-countries-dropdown',
+                options=[{'label': c, 'value': c} for c in sorted(df['country'].unique())],
+                value=['United Kingdom'],
+                multi=True
+            )
+        ], style={'width': '48%', 'display': 'inline-block'}),
+
+        html.Div([
+            html.Label("Compare Countries by Deaths"),
+            dcc.Dropdown(
+                id='deaths-countries-dropdown',
+                options=[{'label': c, 'value': c} for c in sorted(df['country'].unique())],
+                value=['United Kingdom'],
+                multi=True
+            )
+        ], style={'width': '48%', 'float': 'right', 'display': 'inline-block'}),
+    ], style={'margin-bottom': '20px'}),
     
     dcc.RangeSlider(
         id='date-slider',
@@ -53,51 +69,51 @@ app.layout = html.Div([
     ])
 ])
 
+import plotly.colors as pc
+
 @app.callback(
     [Output('cases-plot', 'figure'),
      Output('deaths-plot', 'figure')],
-    [Input('country-dropdown', 'value'),
-     Input('date-slider', 'value'),
-     Input('lock-deaths', 'value')],
-    State('deaths-plot', 'figure')
+    [Input('cases-countries-dropdown', 'value'),
+     Input('deaths-countries-dropdown', 'value'),
+     Input('date-slider', 'value')]
 )
-def update_plots(selected_country, date_range_idx, lock_deaths, previous_deaths_fig):
-    # Convert slider indices to dates
+def update_plots(cases_countries, deaths_countries, date_range_idx):
     start_date = date_options[date_range_idx[0]]
     end_date = date_options[date_range_idx[1]]
-    
-    # Filter data
-    country_df = df[(df['country'] == selected_country) &
-                    (df['date'] >= start_date) &
-                    (df['date'] <= end_date)]
-    
-    title = (
-            f"COVID-19 Daily New Cases in {selected_country}"
-            f"<br>({start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')})"
-)
+
+    filtered_df = df[(df['date'] >= start_date) & (df['date'] <= end_date)]
+
+    # Define your custom color sequence (choose more if needed)
+    color_sequence = pc.qualitative.Set1 + pc.qualitative.Set2 + pc.qualitative.Set3
 
     # --- Case Plot ---
-    fig_cases = px.line(
-        country_df, x='date', y=['new_cases', 'rolling_avg_cases'],
-        labels={'value': 'Cases', 'date': 'Date', 'variable': 'Metric'},
-        title=title
+    cases_df = filtered_df[filtered_df['country'].isin(cases_countries)].copy()
+    cases_df['country'] = pd.Categorical(cases_df['country'], categories=cases_countries, ordered=True)
+    fig_cases = px.bar(
+        cases_df.sort_values(['country', 'date']),
+        x='date',
+        y='new_cases',
+        color='country',
+        title=f"Daily New COVID-19 Cases<br>({start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')})",
+        color_discrete_sequence=color_sequence[:len(cases_countries)]
     )
-    fig_cases.update_layout(legend_title_text='Metric', template='plotly_white')
+    fig_cases.update_layout(template='plotly_white')
+    fig_cases.update_traces(opacity=0.7)
 
     # --- Death Plot ---
-    if 'lock' in lock_deaths and previous_deaths_fig:
-        fig_deaths = previous_deaths_fig  # Keep previous
-    else:
-        title = (
-            f"COVID-19 Daily New Deaths in {selected_country}"
-            f"<br>({start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')})"
-        )
-        fig_deaths = px.line(
-            country_df, x='date', y=['new_deaths', 'rolling_avg_deaths'],
-            labels={'value': 'Deaths', 'date': 'Date', 'variable': 'Metric'},
-            title=title
-        )
-        fig_deaths.update_layout(legend_title_text='Metric', template='plotly_white')
+    deaths_df = filtered_df[filtered_df['country'].isin(deaths_countries)].copy()
+    deaths_df['country'] = pd.Categorical(deaths_df['country'], categories=deaths_countries, ordered=True)
+    fig_deaths = px.bar(
+        deaths_df.sort_values(['country', 'date']),
+        x='date',
+        y='new_deaths',
+        color='country',
+        title=f"Daily New COVID-19 Deaths<br>({start_date.strftime('%Y-%m')} to {end_date.strftime('%Y-%m')})",
+        color_discrete_sequence=color_sequence[:len(deaths_countries)]
+    )
+    fig_deaths.update_layout(template='plotly_white')
+    fig_deaths.update_traces(opacity=0.7)
 
     return fig_cases, fig_deaths
 
